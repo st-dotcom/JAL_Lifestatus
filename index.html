@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JALライフステータスポイントの月別獲得履歴と目標までの進捗を表示します。">
+  <title>JALライフステータスポイント管理</title>
+
+  <style>
+    /* ========================================
+       デザイン設定
+       ======================================== */
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --card: #fff;
+      --text: #222;
+      --muted: #666;
+      --border: #d9dde3;
+      --accent: #b00020;
+      --success: #1b7f3a;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Noto Sans JP", "Hiragino Kaku Gothic ProN",
+        "Yu Gothic", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(1100px, calc(100% - 32px));
+      margin: 32px auto 64px;
+    }
+
+    h1, h2 {
+      line-height: 1.4;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.5rem, 4vw, 2rem);
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 1.25rem;
+    }
+
+    .note {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 16px;
+      margin: 0 0 24px;
+    }
+
+    .card, .section, details {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .card {
+      padding: 18px;
+      box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
+    }
+
+    .card dt {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .card dd {
+      margin: 4px 0 0;
+      font-size: 1.8rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    .table-scroll:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .wide-table {
+      min-width: 720px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child {
+      text-align: left;
+    }
+
+    thead th {
+      background: #f0f2f5;
+    }
+
+    tbody th {
+      font-weight: 400;
+    }
+
+    tbody tr:hover {
+      background: #fafafa;
+    }
+
+    tbody tr:last-child > * {
+      border-bottom: 0;
+    }
+
+    .strong {
+      font-weight: 700;
+    }
+
+    .achieved {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .pending {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    progress {
+      display: block;
+      width: 160px;
+      height: 10px;
+      margin-left: auto;
+      overflow: hidden;
+      border: 0;
+      border-radius: 999px;
+      background: #e7e9ed;
+      accent-color: var(--accent);
+    }
+
+    progress::-webkit-progress-bar {
+      background: #e7e9ed;
+      border-radius: 999px;
+    }
+
+    progress::-webkit-progress-value {
+      background: var(--accent);
+      border-radius: 999px;
+    }
+
+    progress::-moz-progress-bar {
+      background: var(--accent);
+      border-radius: 999px;
+    }
+
+    details {
+      padding: 16px 20px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 16px;
+      border-radius: 8px;
+      background: #111827;
+      color: #f9fafb;
+      font-size: 0.9rem;
+    }
+
+    .error {
+      margin-bottom: 24px;
+      padding: 16px;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      background: #fff5f5;
+      color: var(--accent);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        width: calc(100% - 20px);
+        margin-top: 16px;
+      }
+
+      .section {
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <header>
+      <h1>JALライフステータスポイント獲得履歴</h1>
+      <p class="note">
+        個人用の記録ページです。JAL公式サイトではありません。
+        <span id="latest-month"></span>
+      </p>
+    </header>
+
+    <noscript>
+      <p class="error">
+        ポイントを表示するには、ブラウザーのJavaScriptを有効にしてください。
+      </p>
+    </noscript>
+
+    <p id="error-message" class="error" role="alert" hidden></p>
+
+    <div id="dashboard" hidden>
+      <dl class="cards">
+        <div class="card">
+          <dt>開始時点</dt>
+          <dd id="initial-points">—</dd>
+        </div>
+        <div class="card">
+          <dt>現在の累計</dt>
+          <dd id="current-total">—</dd>
+        </div>
+        <div class="card">
+          <dt>次のマイルストーン</dt>
+          <dd id="next-milestone">—</dd>
+        </div>
+        <div class="card">
+          <dt>次の目標まで</dt>
+          <dd id="next-remaining">—</dd>
+        </div>
+      </dl>
+
+      <section class="section" aria-labelledby="monthly-title">
+        <h2 id="monthly-title">月別獲得ポイント</h2>
+        <div
+          class="table-scroll"
+          role="region"
+          aria-labelledby="monthly-title"
+          tabindex="0"
+        >
+          <table class="wide-table" aria-labelledby="monthly-title">
+            <thead>
+              <tr>
+                <th scope="col">年月</th>
+                <th scope="col">航空</th>
+                <th scope="col">ライフスタイルサービス</th>
+                <th scope="col">その他</th>
+                <th scope="col">月計</th>
+                <th scope="col">累計</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="category-title">
+        <h2 id="category-title">カテゴリ別累計</h2>
+        <div
+          class="table-scroll"
+          role="region"
+          aria-labelledby="category-title"
+          tabindex="0"
+        >
+          <table aria-labelledby="category-title">
+            <thead>
+              <tr>
+                <th scope="col">カテゴリ</th>
+                <th scope="col">獲得ポイント</th>
+              </tr>
+            </thead>
+            <tbody id="category-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="milestone-title">
+        <h2 id="milestone-title">JGC Life Status マイルストーン</h2>
+        <div
+          class="table-scroll"
+          role="region"
+          aria-labelledby="milestone-title"
+          tabindex="0"
+        >
+          <table class="wide-table" aria-labelledby="milestone-title">
+            <thead>
+              <tr>
+                <th scope="col">マイルストーン</th>
+                <th scope="col">現在の累計</th>
+                <th scope="col">残りポイント</th>
+                <th scope="col">達成率</th>
+                <th scope="col">進捗</th>
+                <th scope="col">状況</th>
+              </tr>
+            </thead>
+            <tbody id="milestone-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <details>
+      <summary>更新方法</summary>
+      <p>
+        このHTMLの <code>HISTORY</code> に、次の形式で新しい月を追加して保存してください。
+        月の並び順は自動で整列されます。
+      </p>
+      <pre><code>{ month: "2026-09", air: 5, lifestyle: 6, other: 0 },</code></pre>
+      <p>
+        同じ月のデータがある場合は、その行を修正してください。
+        累計と目標までの残りポイントは自動で再計算されます。
+      </p>
+      <p>
+        開始時点のポイントは <code>INITIAL_POINTS</code>、
+        目標は <code>MILESTONES</code> で変更できます。
+        開始時点のポイントには、月別履歴に記載する分を含めないでください。
+      </p>
+    </details>
+  </main>
+
+  <script>
+    "use strict";
+
+    (() => {
+      // ========================================
+      // 1. 更新するデータ
+      // ========================================
+
+      // 月別履歴に含まれない、開始時点のポイント
+      const INITIAL_POINTS = 100;
+
+      // 各月1行。ポイントがないカテゴリは0にします。
+      const HISTORY = [
+        { month: "2023-12", air: 35, lifestyle: 0,  other: 0 },
+        { month: "2024-04", air: 5,  lifestyle: 0,  other: 0 },
+        { month: "2024-05", air: 0,  lifestyle: 5,  other: 0 },
+        { month: "2024-09", air: 5,  lifestyle: 5,  other: 0 },
+        { month: "2024-10", air: 15, lifestyle: 0,  other: 0 },
+        { month: "2024-11", air: 5,  lifestyle: 0,  other: 0 },
+        { month: "2024-12", air: 5,  lifestyle: 5,  other: 1 },
+        { month: "2025-08", air: 0,  lifestyle: 6,  other: 0 },
+        { month: "2025-09", air: 20, lifestyle: 2,  other: 0 },
+        { month: "2025-10", air: 20, lifestyle: 6,  other: 10 },
+        { month: "2025-11", air: 0,  lifestyle: 6,  other: 4 },
+        { month: "2025-12", air: 5,  lifestyle: 6,  other: 0 },
+        { month: "2026-01", air: 5,  lifestyle: 2,  other: 0 },
+        { month: "2026-02", air: 0,  lifestyle: 6,  other: 0 },
+        { month: "2026-03", air: 15, lifestyle: 1,  other: 0 },
+        { month: "2026-04", air: 0,  lifestyle: 9,  other: 0 },
+        { month: "2026-05", air: 0,  lifestyle: 6,  other: 0 },
+        { month: "2026-06", air: 15, lifestyle: 6,  other: 0 },
+        { month: "2026-07", air: 0,  lifestyle: 6,  other: 0 },
+        { month: "2026-08", air: 20, lifestyle: 11, other: 0 },
+      ];
+
+      const MILESTONES = [500, 1500, 3000, 6000, 12000];
+
+      // ========================================
+      // 2. 共通設定・入力チェック
+      // ========================================
+
+      const CATEGORIES = [
+        { key: "air", label: "航空" },
+        { key: "lifestyle", label: "ライフスタイルサービス" },
+        { key: "other", label: "その他" },
+      ];
+
+      const numberFormatter = new Intl.NumberFormat("ja-JP");
+      const format = value => numberFormatter.format(value);
+      const points = value => `${format(value)} pt`;
+      const byId = id => document.getElementById(id);
+
+      function validatePoints(value, label) {
+        if (!Number.isSafeInteger(value) || value < 0) {
+          throw new Error(`${label}には0以上の整数を入力してください。`);
+        }
+      }
+
+      function validateData(initialPoints, history, milestones) {
+        validatePoints(initialPoints, "開始時点のポイント");
+
+        if (!Array.isArray(history)) {
+          throw new Error("HISTORYは配列にしてください。");
+        }
+
+        const months = new Set();
+
+        history.forEach((item, index) => {
+          if (
+            !item ||
+            typeof item.month !== "string" ||
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(item.month)
+          ) {
+            throw new Error(
+              `履歴の${index + 1}行目の年月を「2026-09」の形式で入力してください。`
+            );
+          }
+
+          if (months.has(item.month)) {
+            throw new Error(`${item.month}が重複しています。各月1行にまとめてください。`);
+          }
+
+          months.add(item.month);
+
+          CATEGORIES.forEach(({ key, label }) => {
+            validatePoints(item[key], `${item.month}の${label}`);
+          });
+        });
+
+        if (!Array.isArray(milestones) || milestones.length === 0) {
+          throw new Error("マイルストーンを1つ以上設定してください。");
+        }
+
+        milestones.forEach(value => {
+          validatePoints(value, "マイルストーン");
+          if (value === 0) {
+            throw new Error("マイルストーンは1以上にしてください。");
+          }
+        });
+
+        if (new Set(milestones).size !== milestones.length) {
+          throw new Error("マイルストーンが重複しています。");
+        }
+      }
+
+      // ========================================
+      // 3. 計算（画面の操作はここでは行いません）
+      // ========================================
+
+      function calculate(initialPoints, history, milestones) {
+        const totals = Object.fromEntries(
+          CATEGORIES.map(({ key }) => [key, 0])
+        );
+
+        let currentTotal = initialPoints;
+
+        const months = [...history]
+          .sort((a, b) => a.month.localeCompare(b.month))
+          .map(item => {
+            let monthlyTotal = 0;
+
+            CATEGORIES.forEach(({ key }) => {
+              totals[key] += item[key];
+              monthlyTotal += item[key];
+            });
+
+            currentTotal += monthlyTotal;
+
+            if (!Number.isSafeInteger(currentTotal)) {
+              throw new Error("累計ポイントが計算可能な範囲を超えています。");
+            }
+
+            return { ...item, monthlyTotal, cumulative: currentTotal };
+          });
+
+        const goals = [...milestones]
+          .sort((a, b) => a - b)
+          .map(target => ({
+            target,
+            remaining: Math.max(target - currentTotal, 0),
+            rate: Math.min(currentTotal / target * 100, 100),
+            achieved: currentTotal >= target,
+          }));
+
+        return {
+          initialPoints,
+          currentTotal,
+          earnedTotal: currentTotal - initialPoints,
+          totals,
+          months,
+          goals,
+          nextGoal: goals.find(goal => !goal.achieved),
+        };
+      }
+
+      // ========================================
+      // 4. 画面表示
+      //    データはHTML文字列にせず、安全に挿入します。
+      // ========================================
+
+      function createCell(value, { heading = false, className = "" } = {}) {
+        const cell = document.createElement(heading ? "th" : "td");
+
+        if (heading) cell.scope = "row";
+        if (className) cell.className = className;
+
+        if (value instanceof Node) {
+          cell.append(value);
+        } else {
+          cell.textContent = String(value);
+        }
+
+        return cell;
+      }
+
+      function createRow(values, strongIndexes = []) {
+        const row = document.createElement("tr");
+
+        values.forEach((value, index) => {
+          row.append(createCell(value, {
+            heading: index === 0,
+            className: strongIndexes.includes(index) ? "strong" : "",
+          }));
+        });
+
+        return row;
+      }
+
+      function renderSummary(model) {
+        byId("initial-points").textContent = points(model.initialPoints);
+        byId("current-total").textContent = points(model.currentTotal);
+        byId("next-milestone").textContent = model.nextGoal
+          ? points(model.nextGoal.target)
+          : "全達成";
+        byId("next-remaining").textContent = points(
+          model.nextGoal?.remaining ?? 0
+        );
+
+        const latest = model.months[model.months.length - 1];
+
+        byId("latest-month").textContent = latest
+          ? `最終記録：${latest.month.replace("-", "年")}月`
+          : "月別履歴はまだありません。";
+      }
+
+      function renderMonthly(model) {
+        const rows = [
+          createRow(
+            ["開始時点", "—", "—", "—", "—", format(model.initialPoints)],
+            [5]
+          ),
+          ...model.months.map(item => createRow([
+            item.month,
+            ...CATEGORIES.map(({ key }) => format(item[key])),
+            format(item.monthlyTotal),
+            format(item.cumulative),
+          ], [4, 5])),
+        ];
+
+        byId("monthly-body").replaceChildren(...rows);
+      }
+
+      function renderCategories(model) {
+        const entries = [
+          ...CATEGORIES.map(({ key, label }) => [label, model.totals[key]]),
+          ["月別履歴の合計", model.earnedTotal],
+          ["開始時点", model.initialPoints],
+          ["総累計", model.currentTotal],
+        ];
+
+        byId("category-body").replaceChildren(
+          ...entries.map(([label, value]) =>
+            createRow([label, format(value)], [1])
+          )
+        );
+      }
+
+      function renderMilestones(model) {
+        const rows = model.goals.map(goal => {
+          const progress = document.createElement("progress");
+          progress.max = goal.target;
+          progress.value = Math.min(model.currentTotal, goal.target);
+          progress.textContent = `${goal.rate.toFixed(1)}%`;
+          progress.setAttribute(
+            "aria-label",
+            `${format(goal.target)}ポイントへの達成率`
+          );
+
+          const row = createRow([
+            `${format(goal.target)}ポイント`,
+            format(model.currentTotal),
+            format(goal.remaining),
+            `${goal.rate.toFixed(1)}%`,
+            progress,
+          ], [2]);
+
+          row.append(createCell(
+            goal.achieved ? "達成済み" : "未達成",
+            { className: goal.achieved ? "achieved" : "pending" }
+          ));
+
+          return row;
+        });
+
+        byId("milestone-body").replaceChildren(...rows);
+      }
+
+      // ========================================
+      // 5. 起動
+      // ========================================
+
+      function initialize() {
+        try {
+          validateData(INITIAL_POINTS, HISTORY, MILESTONES);
+
+          const model = calculate(INITIAL_POINTS, HISTORY, MILESTONES);
+
+          renderSummary(model);
+          renderMonthly(model);
+          renderCategories(model);
+          renderMilestones(model);
+
+          byId("dashboard").hidden = false;
+        } catch (error) {
+          const message = byId("error-message");
+          message.textContent = `データを確認してください：${error.message}`;
+          message.hidden = false;
+          console.error(error);
+        }
+      }
+
+      initialize();
+    })();
+  </script>
+</body>
+</html>
